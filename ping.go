@@ -53,8 +53,16 @@ func keepalive(c *client) {
 					ping := packets.NewControlPacket(packets.Pingreq).(*packets.PingreqPacket)
 					//We don't want to wait behind large messages being sent, the Write call
 					//will block until it it able to send the packet.
+					if c.options.WriteTimeout > 0 {
+						// fmt.Println("ping cxxxxx:", c != nil, c.conn != nil)
+						c.conn.SetWriteDeadline(time.Now().Add(c.options.WriteTimeout))
+					}
 					atomic.StoreInt32(&c.pingOutstanding, 1)
 					ping.Write(c.conn)
+					if c.options.WriteTimeout > 0 {
+						c.conn.SetWriteDeadline(time.Time{})
+					}
+					DEBUG.Println(PNG, "keepalive sending ping --ok")
 					c.lastSent.Store(time.Now())
 					pingSent = time.Now()
 				}

@@ -34,6 +34,7 @@ const (
 	connecting
 	reconnecting
 	connected
+	disconnectting
 )
 
 // Client is the interface definition for a Client as used by this
@@ -495,14 +496,37 @@ func (c *client) forceDisconnect() {
 	c.disconnect()
 }
 
+func (c *client) drainOutChannels() {
+	//drain channels
+	for {
+		breakOut := false
+		select {
+		case pub := <-c.obound:
+			pub.t.setError(errors.New("Not Connected"))
+		case msg := <-c.oboundP:
+			msg.t.setError(errors.New("Not Connected"))
+		default:
+			breakOut = true
+		}
+		if breakOut {
+			break
+		}
+	}
+}
+
 func (c *client) internalConnLost(err error) {
 	// Only do anything if this was called and we are still "connected"
 	// forceDisconnect can cause incoming/outgoing/alllogic to end with
 	// error from closing the socket but state will be "disconnected"
 	if c.IsConnected() {
+		c.setConnected(disconnectting)
 		c.closeStop()
 		c.conn.Close()
 		c.workers.Wait()
+
+		//drain channels
+		c.drainOutChannels()
+
 		if c.options.CleanSession && !c.options.AutoReconnect {
 			c.messageIds.cleanUp()
 		}
@@ -553,9 +577,16 @@ func (c *client) closeConn() {
 }
 
 func (c *client) disconnect() {
+	c.setConnected(disconnectting)
+	DEBUG.Println(CLI, "disconnecting")
+
 	c.closeStop()
 	c.closeConn()
 	c.workers.Wait()
+
+	//drain channels
+	c.drainOutChannels()
+
 	c.messageIds.cleanUp()
 	c.closeStopRouter()
 	DEBUG.Println(CLI, "disconnected")
