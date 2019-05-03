@@ -34,7 +34,7 @@ const (
 	connecting
 	reconnecting
 	connected
-	disconnectting
+	disconnecting
 )
 
 // Client is the interface definition for a Client as used by this
@@ -210,6 +210,11 @@ func (c *client) Connect() Token {
 	var err error
 	t := newToken(packets.Connect).(*ConnectToken)
 	DEBUG.Println(CLI, "Connect()")
+
+	if c.connectionStatus() != disconnected {
+		t.setError(fmt.Errorf("Connection is still inuse, status code:%d", c.connectionStatus))
+		return t
+	}
 
 	c.obound = make(chan *PacketAndToken, c.options.MessageChannelDepth)
 	c.oboundP = make(chan *PacketAndToken, c.options.MessageChannelDepth)
@@ -468,7 +473,7 @@ func (c *client) Disconnect(quiesce uint) {
 	status := atomic.LoadUint32(&c.status)
 	if status == connected {
 		DEBUG.Println(CLI, "disconnecting")
-		c.setConnected(disconnected)
+		c.setConnected(disconnecting)
 
 		dm := packets.NewControlPacket(packets.Disconnect).(*packets.DisconnectPacket)
 		dt := newToken(packets.Disconnect)
@@ -478,7 +483,7 @@ func (c *client) Disconnect(quiesce uint) {
 		dt.WaitTimeout(time.Duration(quiesce) * time.Millisecond)
 	} else {
 		WARN.Println(CLI, "Disconnect() called but not connected (disconnected/reconnecting)")
-		c.setConnected(disconnected)
+		c.setConnected(disconnecting)
 	}
 
 	c.disconnect()
@@ -519,7 +524,7 @@ func (c *client) internalConnLost(err error) {
 	// forceDisconnect can cause incoming/outgoing/alllogic to end with
 	// error from closing the socket but state will be "disconnected"
 	if c.IsConnected() {
-		c.setConnected(disconnectting)
+		c.setConnected(disconnecting)
 		c.closeStop()
 		c.conn.Close()
 		c.workers.Wait()
@@ -577,7 +582,7 @@ func (c *client) closeConn() {
 }
 
 func (c *client) disconnect() {
-	c.setConnected(disconnectting)
+	c.setConnected(disconnecting)
 	DEBUG.Println(CLI, "disconnecting")
 
 	c.closeStop()
