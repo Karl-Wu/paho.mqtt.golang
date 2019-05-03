@@ -26,7 +26,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/eclipse/paho.mqtt.golang/packets"
+	"github.com/Karl-Wu/paho.mqtt.golang/packets"
 )
 
 const (
